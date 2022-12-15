@@ -4,7 +4,7 @@ import sys
 import numpy as np
 
 from EMS.utilities import read_ply, showPoints
-from EMS.EMS_recovery import EMS_recovery
+from EMS.EMS_recovery import (EMS_recovery, PSO_recovery)
 
 import timeit
 
@@ -14,8 +14,8 @@ def main(argv):
         description='Probabilistic Recovery of a superquadric surface from a point cloud file *.ply.')
 
     parser.add_argument(
-        'path_to_data',
-        # default = '~/EMS-probabilistic_superquadric_fitting/MATLAB/example_scripts/data/noisy_pointCloud_example_1.ply',
+        '--path_to_data',
+        default='C:\\Users\\a1349\\PycharmProjects\\EMS-superquadric_fitting\\MATLAB\\example_scripts\\data\\single_superquadric\\partial_pointCloud_example_1.ply',
         help='Path to the directory containing the point cloud file *.ply.'
     )
 
@@ -76,8 +76,12 @@ def main(argv):
     sq_recovered, p = EMS_recovery(point)
 
     start = timeit.default_timer()
-    sq_recovered, p = EMS_recovery(point, 
-                                   OutlierRatio=args.outlierRatio, 
+    # sq_recovered, p = EMS_recovery(point,
+    #                                OutlierRatio=args.outlierRatio,
+    #                                AdaptiveUpperBound=args.adaptiveUpperBound
+    #                   )
+    sq_recovered, p = PSO_recovery(point,
+                                   OutlierRatio=args.outlierRatio,
                                    AdaptiveUpperBound=args.adaptiveUpperBound
                       )
     stop = timeit.default_timer()

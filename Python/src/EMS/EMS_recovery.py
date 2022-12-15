@@ -1,8 +1,92 @@
+import random
+
 import numpy as np
 from numba import njit
 from scipy.optimize import least_squares
 
 from EMS.superquadrics import rotations, superquadric
+
+def PSO_recovery(point, OutlierRatio=0.1, MaxIteration=1000,
+                 ToleranceEM=1e-3, RelativeToleranceEM=1e-1,
+                 MaxOptiIterations=3, Sigma=0, MaxiSwitch=2,
+                 AdaptiveUpperBound=False, Rescale=True):
+    # The function conducting probabilistic superquadric recovery.
+    # Input: point - point cloud np array of N * 3
+    #
+
+    # ---------------------------------------INITIALIZATIONS--------------------------------------------
+    # translate the points to the center of mass
+    point =  point - np.mean(point, 0)
+    t0 = np.mean(point, 0)
+    # rescale the points to the unit sphere
+    if Rescale is True:
+        max_length = np.max(point)
+        scale = max_length / 10
+        point = point / scale
+
+    # eigen analysis for rotation initialization
+    EigVec = EigenAnalysis(point)
+    R0 = rotations()
+    R0.RotM = np.array([-EigVec[:, 0], -EigVec[:, 2],
+                       np.cross(EigVec[:, 0], EigVec[:, 2])]).T
+    euler0 = R0.euler
+
+    # scale initialization
+    point_rot0 = point @ R0.RotM
+    s0 = np.median(np.abs(point_rot0), 0)
+
+    # initialize configuration
+    x0 = np.array([1.0, 1.0, s0[0], s0[1], s0[2],
+                  euler0[0], euler0[1], euler0[2], 0, 0, 0])
+
+    # set lower and upper bounds for the superquadrics
+    upper = 0.1 * np.max(np.abs(point))
+    lb = np.array([0.001, 0.001, 0.001, 0.001, 0.001, -2 * np.pi, -2 *
+                  np.pi, -2 * np.pi, -upper, -upper, -upper])
+    ub = np.array([2.0, 2.0, upper, upper, upper, 2 * np.pi,
+                  2 * np.pi, 2 * np.pi, upper, upper, upper])
+
+    dimension = 11
+    population = 100
+    c1 = 0.1
+    c2 = 0.1
+    w = 0.1
+    # ---------------------------------------INITIALIZATIONS--------------------------------------------
+    x = lb + (ub - lb) * np.random.rand(population, dimension)
+    v = np.random.rand(population, dimension)
+    x_best = x.copy()
+    g_best = np.zeros((1, dimension))
+    f_best = float('inf')
+    for i in range(population):
+        dist = np.sum(Distance(point, x[i]))
+        if dist < f_best:
+            f_best = dist
+            g_best = x[i]
+
+    for i in range(MaxIteration):
+        # update velocity
+        for j in range(population):
+            v[j] = w * v[j] + c1 * random.uniform(0, 1) * \
+                   (x_best[j] - x[j]) + c2 * random.uniform(0, 1) * (g_best - x[j])
+
+            # 更新位置
+            x[j] = x[j] + v[j]
+
+            # 位置限制
+            x[j] = np.clip(x[j], lb, ub)
+
+            # 更新x_best和g_best
+            if np.sum(Distance(point, x[j])) < np.sum(Distance(point, x_best[j])):
+                x_best[j] = x[j]
+            if np.sum(Distance(point, x[j])) < f_best:
+                g_best = x[j]
+                f_best = np.sum(Distance(point, x[j]))
+
+    g_best[8 : 11] = g_best[8 : 11] + t0
+    sq = superquadric(g_best[0 : 2], g_best[2 : 5], g_best[5 : 8], g_best[8 : 11])
+    p = np.ones(point.shape[0])
+    return sq, p
+
 
 def EMS_recovery(
         point, OutlierRatio=0.1, MaxIterationEM=20,
